@@ -1,0 +1,1 @@
+﻿//public enum NoiseType { Perlin, PerlinTurbulence, Value, ValueTurbulence, Voronoi }
