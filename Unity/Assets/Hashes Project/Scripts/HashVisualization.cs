@@ -8,30 +8,27 @@
 //
 //public class HashVisualization : MonoBehaviour {
 //
+//	static int
+//	hashesId = Shader.PropertyToID("_Hashes"),
+//	configId = Shader.PropertyToID("_Config");
+//
+//	[SerializeField]
+//	Mesh instanceMesh;
+//
+//	[SerializeField]
+//	Material material;
+//
+//	[SerializeField, Range(1, 512)]
+//	int resolution = 16;
+//
+//	NativeArray<uint> hashes;
+//
+//	ComputeBuffer hashesBuffer;
+//
+//	MaterialPropertyBlock propertyBlock;
+//
 //	[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
 //	struct HashJob : IJobFor {
-//
-//		static int
-//		hashesId = Shader.PropertyToID("_Hashes"),
-//		configId = Shader.PropertyToID("_Config");
-//
-//		[SerializeField]
-//		Mesh instanceMesh;
-//
-//		[SerializeField]
-//		Material material;
-//
-//		[SerializeField, Range(1, 512)]
-//		static int resolution = 16;
-//
-//		[WriteOnly]
-//		public NativeArray<uint> hashes;
-//
-//		bool enabled;
-//
-//		ComputeBuffer hashesBuffer;
-//
-//		MaterialPropertyBlock propertyBlock;
 //
 //		public void Execute(int i) {
 //			hashes[i] = (uint)i;
