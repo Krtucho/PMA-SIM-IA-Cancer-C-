@@ -5,7 +5,9 @@ using UnityEngine;
 
 public class GPUGraph : MonoBehaviour
 {
-    [SerializeField]
+	const int maxResolution = 1000;
+
+	[SerializeField]
     ComputeShader computeShader;
 
     [SerializeField]
@@ -14,7 +16,7 @@ public class GPUGraph : MonoBehaviour
     [SerializeField]
     Mesh mesh;
 
-    [SerializeField, Range(10, 200)]
+    [SerializeField, Range(10, maxResolution)]
 	int resolution = 10;
 
 	[SerializeField]
@@ -39,10 +41,11 @@ public class GPUGraph : MonoBehaviour
     static readonly int positionsId = Shader.PropertyToID("_Positions"),
         resolutionId = Shader.PropertyToID("_Resolution"),
         stepId = Shader.PropertyToID("_Step"),
-        timeId = Shader.PropertyToID("_Time");
+        timeId = Shader.PropertyToID("_Time"),
+		transitionProgressId = Shader.PropertyToID("_TransitionProgress");
 
     void OnEnable () {
-		positionsBuffer = new ComputeBuffer(resolution * resolution, 3 * 4);
+		positionsBuffer = new ComputeBuffer(maxResolution * maxResolution, 3 * 4);
 	}
 
 	void OnDisable () {
@@ -63,7 +66,6 @@ public class GPUGraph : MonoBehaviour
 			duration -= functionDuration;
 			transitioning = true;
 			transitionFunction = function;
-			//			function = FunctionLibrary.GetNextFunctionName(function);
 			PickNextFunction();
 		}
         UpdateFunctionOnGPU();
@@ -75,12 +77,23 @@ public class GPUGraph : MonoBehaviour
         computeShader.SetInt(resolutionId, resolution);
         computeShader.SetFloat(stepId, step);
         computeShader.SetFloat(timeId, Time.time);
-        computeShader.SetBuffer(0, positionsId, positionsBuffer);
-        int groups = Mathf.CeilToInt(resolution / 8f);
-        computeShader.Dispatch(0, groups, groups, 1);
+		if (transitioning)
+		{
+			computeShader.SetFloat(transitionProgressId,
+				Mathf.SmoothStep(0f, 1f, duration / transitionDuration));
+		}
 
-        var bounds = new Bounds(Vector3.zero, Vector3.one * (2f + 2f / resolution));
-        Graphics.DrawMeshInstancedProcedural(mesh, 0, material, bounds, positionsBuffer.count);
+		var kernelIndex = (int)function + (int)(transitioning ? transitionFunction : function) * FunctionLibrary.FunctionCount;
+		computeShader.SetBuffer(kernelIndex, positionsId, positionsBuffer);
+
+        int groups = Mathf.CeilToInt(resolution / 8f);
+        computeShader.Dispatch(kernelIndex, groups, groups, 1);
+
+		material.SetBuffer(positionsId, positionsBuffer);
+		material.SetFloat(stepId, step);
+
+		var bounds = new Bounds(Vector3.zero, Vector3.one * (2f + 2f / resolution));
+        Graphics.DrawMeshInstancedProcedural(mesh, 0, material, bounds, resolution * resolution);
     }
 
     void PickNextFunction () {
