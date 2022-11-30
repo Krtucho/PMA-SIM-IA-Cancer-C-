@@ -1,73 +1,102 @@
-﻿//using Unity.Burst;
-//using Unity.Collections;
-//using Unity.Jobs;
-//using Unity.Mathematics;
-//using UnityEngine;
-//
-//using static Unity.Mathematics.math;
-//
-//public class HashVisualization : MonoBehaviour {
-//
-//	static int
-//	hashesId = Shader.PropertyToID("_Hashes"),
-//	configId = Shader.PropertyToID("_Config");
-//
-//	[SerializeField]
-//	Mesh instanceMesh;
-//
-//	[SerializeField]
-//	Material material;
-//
-//	[SerializeField, Range(1, 512)]
-//	int resolution = 16;
-//
-//	NativeArray<uint> hashes;
-//
-//	ComputeBuffer hashesBuffer;
-//
-//	MaterialPropertyBlock propertyBlock;
-//
-//	[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
-//	struct HashJob : IJobFor {
-//
-//		public void Execute(int i) {
-//			hashes[i] = (uint)i;
-//		}
-//
-//		void OnEnable () {
-//			int length = resolution * resolution;
-//			hashes = new NativeArray<uint>(length, Allocator.Persistent);
-//			hashesBuffer = new ComputeBuffer(length, 4);
-//
-//			new HashJob {
-//				hashes = hashes
-//			}.ScheduleParallel(hashes.Length, resolution, default).Complete();
-//
-//			hashesBuffer.SetData(hashes);
-//
-//			propertyBlock = new MaterialPropertyBlock();
-//			propertyBlock.SetBuffer(hashesId, hashesBuffer);
-//			propertyBlock.SetVector(configId, new Vector4(resolution, 1f / resolution));
-//		}
-//
-//		void OnDisable () {
-//			hashes.Dispose();
-//			hashesBuffer.Release();
-//			hashesBuffer = null;
-//		}
-//
-//		void OnValidate () {
-//			if (hashesBuffer != null && enabled) {
-//				OnDisable();
-//				OnEnable();
-//			}
-//		}
-//
-//		void Update () {
-//			Graphics.DrawMeshInstancedProcedural(
-//				instanceMesh, 0, material, new Bounds(Vector3.zero, Vector3.one),
-//				hashes.Length, propertyBlock
-//			);
-//		}
-//	}
-//}
+﻿using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+using UnityEngine;
+using System;
+
+using static Unity.Mathematics.math;
+
+public class HashVisualization : Visualization
+{
+
+	[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
+	struct HashJob : IJobFor {
+
+		[ReadOnly]
+		public NativeArray<float3x4> positions;
+
+		[WriteOnly]
+		public NativeArray<uint4> hashes;
+
+		public SmallXXHash4 hash;
+
+		public float3x4 domainTRS;
+
+
+		public void Execute(int i) {
+			
+			float4x3 p = domainTRS.TransformVectors(transpose(positions[i]));
+
+			int4 u = (int4)floor(p.c0);
+			int4 v = (int4)floor(p.c1);
+			int4 w = (int4)floor(p.c2);
+
+			hashes[i] = hash.Eat(u).Eat(v).Eat(w);
+		}
+	}
+
+	static int hashesId = Shader.PropertyToID("_Hashes");
+
+	[SerializeField]
+	int seed;
+
+	[SerializeField, Range(-0.5f, 0.5f)]
+	float displacement = 0.1f;
+
+	[SerializeField]
+	Mesh instanceMesh;
+
+	[SerializeField]
+	Material material;
+
+	[SerializeField, Range(1, 512)]
+	int resolution = 16;
+
+	[SerializeField]
+	SpaceTRS domain = new SpaceTRS {
+		scale = 8f
+	};
+
+	NativeArray<uint4> hashes;
+
+	ComputeBuffer hashesBuffer;
+
+	[SerializeField]
+	Shape shape;
+
+	[SerializeField, Range(0.1f, 10f)]
+	float instanceScale = 2f;
+
+	protected override void EnableVisualization(int dataLength, MaterialPropertyBlock propertyBlock)
+	{
+		hashes = new NativeArray<uint4>(dataLength, Allocator.Persistent);
+		//positions = new NativeArray<float3x4>(length, Allocator.Persistent);
+		//normals = new NativeArray<float3x4>(length, Allocator.Persistent);
+		hashesBuffer = new ComputeBuffer(dataLength * 4, 4);
+
+		propertyBlock.SetBuffer(hashesId, hashesBuffer);
+	}
+
+	protected override void DisableVisualization() {
+		hashes.Dispose();
+		hashesBuffer.Release();
+		hashesBuffer = null;
+	}
+
+
+	protected override void UpdateVisualization(NativeArray<float3x4> positions, int resolution, JobHandle handle)
+	{
+
+		new HashJob
+		{
+			positions = positions,
+			hashes = hashes,
+			hash = SmallXXHash.Seed(seed),
+			domainTRS = domain.Matrix
+		}.ScheduleParallel(hashes.Length, resolution, handle).Complete();
+
+		hashesBuffer.SetData(hashes.Reinterpret<uint>(4 * 4));
+
+	}
+}

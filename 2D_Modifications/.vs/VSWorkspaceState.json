@@ -1,0 +1,12 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\AutomataLibrary",
+    "\\ExperimentBatch",
+    "\\ExperimentSnapper",
+    "\\NetworkGenerator",
+    "\\NetworkTest"
+  ],
+  "SelectedNode": "\\NetworkTest\\Program.cs",
+  "PreviewInSolutionExplorer": false
+}

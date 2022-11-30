@@ -1,95 +1,51 @@
-﻿/*using Unity.Mathematics;
+﻿using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
 
 using static Unity.Mathematics.math;
 
-public enum NoiseType { Perlin, PerlinTurbulence, Value, ValueTurbulence, Voronoi }
 
-public interface ILattice {
-	LatticeSpan4 GetLatticeSpan4 (float4 coordinates, int frequency);
+public static partial class Noise
+{
+	public interface INoise
+	{
+		float4 GetNoise4(float4x3 positions, SmallXXHash4 hash);
+	}
 
-	int4 ValidateSingleStep (int4 points, int frequency);
-}
+	[BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
+	public struct Job<N> : IJobFor where N : struct, INoise {
 
-public struct LatticeNormal : ILattice {
+		[ReadOnly]
+		public NativeArray<float3x4> positions;
 
-	public int4 ValidateSingleStep (int4 points, int frequency) => points;
-}
+		[WriteOnly]
+		public NativeArray<float4> noise;
 
-public struct LatticeTiling : ILattice {
+		public SmallXXHash4 hash;
 
-	public int4 ValidateSingleStep (int4 points, int frequency) =>
-	select(points, 0, points == frequency);
-}
+		public float3x4 domainTRS;
 
-public int4 ValidateSingleStep (int4 points, int frequency) =>
-select(select(points, 0, points == frequency), frequency - 1, points == -1);
-
-static float4 GetDistance (float4 x, float4 y) => sqrt(x * x + y * y);
-
-public static partial class Noise {
-	static ScheduleDelegate[,] noiseJobs = {
-		
-	{ … },
-	{ … },
-	{ … },
+		public void Execute(int i)
 		{
-			Job<Voronoi1D<LatticeNormal>>.ScheduleParallel,
-			Job<Voronoi1D<LatticeTiling>>.ScheduleParallel,
-			Job<Voronoi2D<LatticeNormal>>.ScheduleParallel,
-			Job<Voronoi2D<LatticeTiling>>.ScheduleParallel,
-			Job<Voronoi3D<LatticeNormal>>.ScheduleParallel,
-			Job<Voronoi3D<LatticeTiling>>.ScheduleParallel
+			noise[i] = default(N).GetNoise4(
+				domainTRS.TransformVectors(transpose(positions[i])), hash
+			);
 		}
-	};
 
-	public struct Voronoi1D<L> : INoise where L : struct, ILattice {
-
-		public float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash, int frequency) {
-			LatticeSpan4 x = default(L).GetLatticeSpan4(positions.c0, frequency);
-
-			SmallXXHash4 h = hash.Eat(x.p0);
-			return abs(h.Floats01A - x.g0);
-		}
+		public static JobHandle ScheduleParallel(
+			NativeArray<float3x4> positions, NativeArray<float4> noise,
+			int seed, SpaceTRS domainTRS, int resolution, JobHandle dependency
+		) => new Job<N>
+		{
+			positions = positions,
+			noise = noise,
+			hash = SmallXXHash.Seed(seed),
+			domainTRS = domainTRS.Matrix,
+		}.ScheduleParallel(positions.Length, resolution, dependency);
 	}
-
-	public struct Voronoi2D<L> : INoise where L : struct, ILattice {
-
-		public float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash, int frequency) {
-			var l = default(L);
-			LatticeSpan4
-			x = l.GetLatticeSpan4(positions.c0, frequency),
-			z = l.GetLatticeSpan4(positions.c2, frequency);
-
-			return 0f;
-		}
-	}
-
-	public struct Voronoi3D<L> : INoise where L : struct, ILattice {
-
-		public float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash, int frequency) {
-			var l = default(L);
-			LatticeSpan4
-			x = l.GetLatticeSpan4(positions.c0, frequency),
-			y = l.GetLatticeSpan4(positions.c1, frequency),
-			z = l.GetLatticeSpan4(positions.c2, frequency);
-
-			return 0f;
-		}
-	}
-
-	static float4 UpdateVoronoiMinima (float4 minima, float4 distances) {
-		return select(minima, distances, distances < minima);
-	}
-
-	public float4 GetNoise4 (float4x3 positions, SmallXXHash4 hash, int frequency) {
-		var l = default(L);
-		LatticeSpan4 x = l.GetLatticeSpan4(positions.c0, frequency);
-
-		float4 minima = 2f;
-		for (int u = -1; u <= 1; u++) {
-			SmallXXHash4 h = hash.Eat(l.ValidateSingleStep(x.p0 + u, frequency));
-			minima = UpdateVoronoiMinima(minima, abs(h.Floats01A + u - x.g0));
-		}
-		return minima;
-	}
-}*/
+	public delegate JobHandle ScheduleDelegate(
+		NativeArray<float3x4> positions, NativeArray<float4> noise,
+		int seed, SpaceTRS domainTRS, int resolution, JobHandle dependency
+	);
+}
