@@ -41,7 +41,8 @@ public class GPUGraph : MonoBehaviour
     static readonly int positionsId = Shader.PropertyToID("_Positions"),
         resolutionId = Shader.PropertyToID("_Resolution"),
         stepId = Shader.PropertyToID("_Step"),
-        timeId = Shader.PropertyToID("_Time");
+        timeId = Shader.PropertyToID("_Time"),
+		transitionProgressId = Shader.PropertyToID("_TransitionProgress");
 
     void OnEnable () {
 		positionsBuffer = new ComputeBuffer(maxResolution * maxResolution, 3 * 4);
@@ -65,7 +66,6 @@ public class GPUGraph : MonoBehaviour
 			duration -= functionDuration;
 			transitioning = true;
 			transitionFunction = function;
-			//			function = FunctionLibrary.GetNextFunctionName(function);
 			PickNextFunction();
 		}
         UpdateFunctionOnGPU();
@@ -77,9 +77,17 @@ public class GPUGraph : MonoBehaviour
         computeShader.SetInt(resolutionId, resolution);
         computeShader.SetFloat(stepId, step);
         computeShader.SetFloat(timeId, Time.time);
-        computeShader.SetBuffer(0, positionsId, positionsBuffer);
+		if (transitioning)
+		{
+			computeShader.SetFloat(transitionProgressId,
+				Mathf.SmoothStep(0f, 1f, duration / transitionDuration));
+		}
+
+		var kernelIndex = (int)function + (int)(transitioning ? transitionFunction : function) * FunctionLibrary.FunctionCount;
+		computeShader.SetBuffer(kernelIndex, positionsId, positionsBuffer);
+
         int groups = Mathf.CeilToInt(resolution / 8f);
-        computeShader.Dispatch(0, groups, groups, 1);
+        computeShader.Dispatch(kernelIndex, groups, groups, 1);
 
 		material.SetBuffer(positionsId, positionsBuffer);
 		material.SetFloat(stepId, step);
